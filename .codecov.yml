@@ -6,6 +6,13 @@ codecov:
   notify:
     wait_for_ci: true
 
+ignore:
+  - "_.*"
+  - "vendor"
+  - "scripts"
+  - "contracts"
+  - "Makefile"
+
 coverage:
   status:
     project:
@@ -39,7 +46,7 @@ flags:
   functional-tests:
     paths:
       - ".*"
-    carryforward: true
+    carryforward: false
 
 comment:
   behavior: default
