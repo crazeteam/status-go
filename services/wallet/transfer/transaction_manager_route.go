@@ -163,6 +163,7 @@ func buildTxForPath(transactor transactions.TransactorIface, path *routes.Path, 
 		MaxPriorityFeePerGas: path.TxPriorityFee,
 
 		// additional fields version 1
+		ValueIn:            path.AmountIn,
 		ValueOut:           path.AmountOut,
 		FromChainID:        path.FromChain.ChainID,
 		ToChainID:          path.ToChain.ChainID,
