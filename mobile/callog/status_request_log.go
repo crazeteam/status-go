@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/status-im/status-go/internal/sentry"
 )
 
 var sensitiveKeys = []string{
@@ -64,6 +66,7 @@ func Call(logger, requestLogger *zap.Logger, fn any, params ...any) any {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Error("panic found in call", zap.Any("error", r), zap.Stack("stacktrace"))
+			sentry.RecoverError(r)
 			panic(r)
 		}
 	}()

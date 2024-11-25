@@ -35,6 +35,7 @@ import (
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/eth-node/types"
 	"github.com/status-im/status-go/images"
+	"github.com/status-im/status-go/internal/sentry"
 	"github.com/status-im/status-go/internal/version"
 	"github.com/status-im/status-go/logutils"
 	"github.com/status-im/status-go/multiaccounts"
@@ -101,6 +102,7 @@ type GethStatusBackend struct {
 	allowAllRPC              bool // used only for tests, disables api method restrictions
 	LocalPairingStateManager *statecontrol.ProcessStateManager
 	centralizedMetrics       *centralizedmetrics.MetricService
+	sentryDSN                string
 
 	logger *zap.Logger
 }
@@ -2119,6 +2121,7 @@ func (b *GethStatusBackend) startNode(config *params.NodeConfig) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("node crashed on start: %v", err)
+			sentry.RecoverError(err)
 		}
 	}()
 
@@ -2844,4 +2847,26 @@ func (b *GethStatusBackend) getWalletDBPath(keyUID string) (string, error) {
 	}
 
 	return filepath.Join(b.rootDataDir, fmt.Sprintf("%s-wallet.db", keyUID)), nil
+}
+
+func (b *GethStatusBackend) SetSentryDSN(dsn string) {
+	b.sentryDSN = dsn
+}
+
+func (b *GethStatusBackend) EnablePanicReporting() error {
+	return sentry.Init(
+		sentry.WithDSN(b.sentryDSN),
+		sentry.WithDefaultContext(),
+	)
+}
+
+func (b *GethStatusBackend) DisablePanicReporting() error {
+	return sentry.Close()
+}
+
+func (b *GethStatusBackend) TogglePanicReporting(enabled bool) error {
+	if enabled {
+		return b.EnablePanicReporting()
+	}
+	return b.DisablePanicReporting()
 }

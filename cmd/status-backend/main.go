@@ -10,12 +10,13 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/status-im/status-go/cmd/status-backend/server"
+	"github.com/status-im/status-go/internal/sentry"
 	"github.com/status-im/status-go/internal/version"
 	"github.com/status-im/status-go/logutils"
 )
 
 var (
-	address = flag.String("address", "", "host:port to listen")
+	address = flag.String("address", "127.0.0.1:0", "host:port to listen")
 	logger  = log.New("package", "status-go/cmd/status-backend")
 )
 
@@ -32,6 +33,12 @@ func init() {
 }
 
 func main() {
+	sentry.MustInit(
+		sentry.WithDefaultEnvironmentDSN(),
+		sentry.WithContext("status-backend", version.Version()),
+	)
+	defer sentry.Recover()
+
 	flag.Parse()
 
 	srv := server.NewServer()

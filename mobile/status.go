@@ -99,6 +99,16 @@ func initializeApplication(requestJSON string) string {
 	if err != nil {
 		return makeJSONResponse(err)
 	}
+
+	// initialize sentry
+	statusBackend.SetSentryDSN(request.SentryDSN)
+	if centralizedMetricsInfo.Enabled {
+		err = statusBackend.EnablePanicReporting()
+		if err != nil {
+			return makeJSONResponse(err)
+		}
+	}
+
 	response := &InitializeApplicationResponse{
 		Accounts:               accs,
 		CentralizedMetricsInfo: centralizedMetricsInfo,
@@ -2198,6 +2208,11 @@ func toggleCentralizedMetrics(requestJSON string) string {
 	}
 
 	err = statusBackend.ToggleCentralizedMetrics(request.Enabled)
+	if err != nil {
+		return makeJSONResponse(err)
+	}
+
+	err = statusBackend.TogglePanicReporting(request.Enabled)
 	if err != nil {
 		return makeJSONResponse(err)
 	}
