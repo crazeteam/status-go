@@ -2261,3 +2261,13 @@ func addCentralizedMetric(requestJSON string) string {
 
 	return metric.ID
 }
+
+func IntendedPanic(message string) string {
+	type intendedPanic struct {
+		error
+	}
+	return callWithResponse(func() {
+		err := intendedPanic{error: errors.New(message)}
+		panic(err)
+	})
+}
