@@ -16,9 +16,7 @@ import (
 	gocommon "github.com/status-im/status-go/common"
 	"github.com/status-im/status-go/logutils"
 	"github.com/status-im/status-go/rpc/chain"
-	"github.com/status-im/status-go/services/wallet/async"
 	"github.com/status-im/status-go/services/wallet/market"
-	"github.com/status-im/status-go/services/wallet/thirdparty"
 	"github.com/status-im/status-go/services/wallet/token"
 	"github.com/status-im/status-go/services/wallet/transfer"
 	"github.com/status-im/status-go/services/wallet/walletevent"
@@ -33,10 +31,6 @@ const (
 	activityReloadDelay         = 30 // Wait this many seconds after activity is detected before triggering a wallet reload
 	activityReloadMarginSeconds = 30 // Trigger a wallet reload if activity is detected this many seconds before the last reload
 )
-
-func getFixedCurrencies() []string {
-	return []string{"USD"}
-}
 
 func belongsToMandatoryTokens(symbol string) bool {
 	var mandatoryTokens = []string{"ETH", "DAI", "SNT", "STT"}
@@ -461,100 +455,6 @@ func (r *Reader) createBalancePerChainPerSymbol(
 	}
 
 	return balancesPerChain
-}
-
-func (r *Reader) GetWalletToken(ctx context.Context, clients map[uint64]chain.ClientInterface, addresses []common.Address, currency string) (map[common.Address][]token.StorageToken, error) {
-	currencies := make([]string, 0)
-	currencies = append(currencies, currency)
-	currencies = append(currencies, getFixedCurrencies()...)
-
-	result, err := r.FetchOrGetCachedWalletBalances(ctx, clients, addresses, true)
-	if err != nil {
-		return nil, err
-	}
-
-	tokenSymbols := make([]string, 0)
-	for _, storageTokens := range result {
-		for _, t := range storageTokens {
-			tokenSymbols = append(tokenSymbols, t.Token.Symbol)
-		}
-	}
-
-	var (
-		group             = async.NewAtomicGroup(ctx)
-		prices            = map[string]map[string]market.DataPoint{}
-		tokenDetails      = map[string]thirdparty.TokenDetails{}
-		tokenMarketValues = map[string]thirdparty.TokenMarketValues{}
-	)
-
-	group.Add(func(parent context.Context) error {
-		prices, err = r.marketManager.GetOrFetchPrices(tokenSymbols, currencies, market.MaxAgeInSecondsForBalances)
-		if err != nil {
-			logutils.ZapLogger().Info("marketManager.GetOrFetchPrices", zap.Error(err))
-		}
-		return nil
-	})
-
-	group.Add(func(parent context.Context) error {
-		tokenDetails, err = r.marketManager.FetchTokenDetails(tokenSymbols)
-		if err != nil {
-			logutils.ZapLogger().Info("marketManager.FetchTokenDetails", zap.Error(err))
-		}
-		return nil
-	})
-
-	group.Add(func(parent context.Context) error {
-		tokenMarketValues, err = r.marketManager.GetOrFetchTokenMarketValues(tokenSymbols, currency, market.MaxAgeInSecondsForBalances)
-		if err != nil {
-			logutils.ZapLogger().Info("marketManager.GetOrFetchTokenMarketValues", zap.Error(err))
-		}
-		return nil
-	})
-
-	select {
-	case <-group.WaitAsync():
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-	err = group.Error()
-	if err != nil {
-		return nil, err
-	}
-
-	for address, tokens := range result {
-		for index, tok := range tokens {
-			marketValuesPerCurrency := make(map[string]token.TokenMarketValues)
-			for _, currency := range currencies {
-				if _, ok := tokenMarketValues[tok.Symbol]; !ok {
-					continue
-				}
-				marketValuesPerCurrency[currency] = token.TokenMarketValues{
-					MarketCap:       tokenMarketValues[tok.Symbol].MKTCAP,
-					HighDay:         tokenMarketValues[tok.Symbol].HIGHDAY,
-					LowDay:          tokenMarketValues[tok.Symbol].LOWDAY,
-					ChangePctHour:   tokenMarketValues[tok.Symbol].CHANGEPCTHOUR,
-					ChangePctDay:    tokenMarketValues[tok.Symbol].CHANGEPCTDAY,
-					ChangePct24hour: tokenMarketValues[tok.Symbol].CHANGEPCT24HOUR,
-					Change24hour:    tokenMarketValues[tok.Symbol].CHANGE24HOUR,
-					Price:           prices[tok.Symbol][currency].Price,
-					HasError:        !r.marketManager.IsConnected,
-				}
-			}
-
-			if _, ok := tokenDetails[tok.Symbol]; !ok {
-				continue
-			}
-
-			result[address][index].Description = tokenDetails[tok.Symbol].Description
-			result[address][index].AssetWebsiteURL = tokenDetails[tok.Symbol].AssetWebsiteURL
-			result[address][index].BuiltOn = tokenDetails[tok.Symbol].BuiltOn
-			result[address][index].MarketValuesPerCurrency = marketValuesPerCurrency
-		}
-	}
-
-	r.updateTokenUpdateTimestamp(addresses)
-
-	return result, r.persistence.SaveTokens(result)
 }
 
 // GetLastTokenUpdateTimestamps returns last timestamps of successful token updates
