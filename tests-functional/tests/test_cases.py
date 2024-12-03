@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import json
 import logging
 import threading
@@ -6,10 +7,10 @@ from collections import namedtuple
 
 import pytest
 
-from clients.signals import SignalClient
+from clients.signals import SignalClient, SignalType
 from clients.status_backend import RpcClient, StatusBackend
 from conftest import option
-from constants import user_1, user_2
+from constants import user_1, user_2, DEFAULT_DISPLAY_NAME
 
 
 class StatusDTestCase:
@@ -24,7 +25,7 @@ class StatusDTestCase:
 class StatusBackendTestCase:
 
     await_signals = [
-        "node.ready"
+        SignalType.NODE_READY.value
     ]
 
     def setup_class(self):
@@ -32,7 +33,7 @@ class StatusBackendTestCase:
 
         self.rpc_client.init_status_backend()
         self.rpc_client.restore_account_and_login()
-        self.rpc_client.wait_for_signal("node.ready")
+        self.rpc_client.wait_for_signal(SignalType.NODE_READY.value)
 
         self.network_id = 31337
 
@@ -150,3 +151,63 @@ class SignalTestCase(StatusDTestCase):
         websocket_thread = threading.Thread(target=self.signal_client._connect)
         websocket_thread.daemon = True
         websocket_thread.start()
+
+
+class NetworkConditionTestCase:
+
+    @contextmanager
+    def add_latency(self):
+        pass
+        #TODO: To be implemented when we have docker exec capability
+
+    @contextmanager
+    def add_packet_loss(self):
+        pass
+        #TODO: To be implemented when we have docker exec capability
+
+    @contextmanager
+    def add_low_bandwith(self):
+        pass
+        #TODO: To be implemented when we have docker exec capability
+
+    @contextmanager
+    def node_pause(self, node):
+        pass
+        #TODO: To be implemented when we have docker exec capability
+
+class OneToOneMessageTestCase(NetworkConditionTestCase):
+
+    def initialize_backend(self, await_signals, display_name=DEFAULT_DISPLAY_NAME, url=None):
+        backend = StatusBackend(await_signals=await_signals, url=url)
+        backend.init_status_backend()
+        backend.create_account_and_login(display_name=display_name)
+        backend.start_messenger()
+        return backend
+
+
+    def validate_event_against_response(self, event, fields_to_validate, response):
+        messages_in_event = event["event"]["messages"]
+        assert len(messages_in_event) > 0, "No messages found in the event"
+        response_chat = response["result"]["chats"][0]
+
+        message_id = response_chat["lastMessage"]["id"]
+        message = next((message for message in messages_in_event if message["id"] == message_id), None)
+        assert message, f"Message with ID {message_id} not found in the event"
+
+        message_mismatch = []
+        for response_field, event_field in fields_to_validate.items():
+            response_value = response_chat["lastMessage"][response_field]
+            event_value = message[event_field]
+            if response_value != event_value:
+                message_mismatch.append(
+                    f"Field '{response_field}': Expected '{response_value}', Found '{event_value}'"
+                )
+
+        if not message_mismatch:
+            return
+
+        raise AssertionError(
+            "Some Sender RPC responses are not matching the signals received by the receiver.\n"
+            "Details of mismatches:\n" +
+            "\n".join(message_mismatch)
+        )

@@ -4,12 +4,13 @@ import time
 import random
 import threading
 import requests
+from tenacity import retry, stop_after_delay, wait_fixed
 
 from clients.signals import SignalClient
 from clients.rpc import RpcClient
 from datetime import datetime
 from conftest import option
-from constants import user_1
+from constants import user_1, DEFAULT_DISPLAY_NAME
 
 
 
@@ -66,7 +67,7 @@ class StatusBackend(RpcClient, SignalClient):
         }
         return self.api_valid_request(method, data)
 
-    def create_account_and_login(self, display_name="Mr_Meeseeks", password=user_1.password):
+    def create_account_and_login(self, display_name=DEFAULT_DISPLAY_NAME, password=user_1.password):
         data_dir = f"dataDir_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         method = "CreateAccountAndLogin"
         data = {
@@ -78,7 +79,7 @@ class StatusBackend(RpcClient, SignalClient):
         }
         return self.api_valid_request(method, data)
 
-    def restore_account_and_login(self, display_name="Mr_Meeseeks", user=user_1):
+    def restore_account_and_login(self, display_name=DEFAULT_DISPLAY_NAME, user=user_1):
         method = "RestoreAccountAndLogin"
         data = {
             "rootDataDir": "/",
@@ -118,6 +119,7 @@ class StatusBackend(RpcClient, SignalClient):
                 time.sleep(3)
         raise TimeoutError(f"RPC client was not started after {timeout} seconds")
 
+    @retry(stop=stop_after_delay(10), wait=wait_fixed(0.5), reraise=True)
     def start_messenger(self, params=[]):
         method = "wakuext_startMessenger"
         response = self.rpc_request(method, params)
@@ -139,3 +141,29 @@ class StatusBackend(RpcClient, SignalClient):
         method = "settings_getSettings"
         response = self.rpc_request(method, params)
         self.verify_is_valid_json_rpc_response(response)
+
+    def get_accounts(self, params=[]):
+        method = "accounts_getAccounts"
+        response = self.rpc_request(method, params)
+        self.verify_is_valid_json_rpc_response(response)
+        return response.json()
+
+    def get_pubkey(self, display_name):
+        response = self.get_accounts()
+        accounts = response.get("result", [])
+        for account in accounts:
+            if account.get("name") == display_name:
+                return account.get("public-key")
+        raise ValueError(f"Public key not found for display name: {display_name}")
+
+    def send_contact_request(self, params=[]):
+        method = "wakuext_sendContactRequest"
+        response = self.rpc_request(method, params)
+        self.verify_is_valid_json_rpc_response(response)
+        return response.json()
+
+    def send_message(self, params=[]):
+        method = "wakuext_sendOneToOneMessage"
+        response = self.rpc_request(method, params)
+        self.verify_is_valid_json_rpc_response(response)
+        return response.json()
