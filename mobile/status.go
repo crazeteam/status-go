@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"unsafe"
 
 	"go.uber.org/zap"
@@ -1069,6 +1070,17 @@ func WriteHeapProfile(dataDir string) string {
 func writeHeapProfile(dataDir string) string { //nolint: deadcode
 	err := profiling.WriteHeapFile(dataDir)
 	return makeJSONResponse(err)
+}
+
+// StartProfiling starts profiling and HTTP server for pprof
+func StartProfiling(address string) string {
+	return callWithResponse(startProfiling, address)
+}
+
+func startProfiling(address string) string {
+	runtime.SetMutexProfileFraction(5)
+	profiling.NewProfiler(address).Go()
+	return makeJSONResponse(nil)
 }
 
 func makeJSONResponse(err error) string {

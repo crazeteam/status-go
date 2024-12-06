@@ -53,10 +53,26 @@ func (s *Server) signalHandler(data []byte) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	for connection := range s.connections {
-		err := connection.WriteMessage(websocket.TextMessage, data)
+	deleteConnection := func(connection *websocket.Conn) {
+		delete(s.connections, connection)
+		err := connection.Close()
 		if err != nil {
-			log.Error("failed to write message: %w", err)
+			log.Error("failed to close connection", "error", err)
+		}
+	}
+
+	for connection := range s.connections {
+		err := connection.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if err != nil {
+			log.Error("failed to set write deadline", "error", err)
+			deleteConnection(connection)
+			continue
+		}
+
+		err = connection.WriteMessage(websocket.TextMessage, data)
+		if err != nil {
+			log.Error("failed to write signal message", "error", err)
+			deleteConnection(connection)
 		}
 	}
 }
@@ -130,6 +146,7 @@ func (s *Server) signals(w http.ResponseWriter, r *http.Request) {
 		log.Error("failed to upgrade connection: %w", err)
 		return
 	}
+	log.Debug("new websocket connection")
 
 	s.connections[connection] = struct{}{}
 }
