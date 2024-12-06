@@ -1705,7 +1705,15 @@ func (w *Waku) handleNetworkChangeFromApp(state connection.State) {
 	}
 }
 
+func (w *Waku) isGoingOnline(state connection.State) bool {
+	return !state.Offline && !w.onlineChecker.IsOnline()
+}
+
 func (w *Waku) ConnectionChanged(state connection.State) {
+	if w.isGoingOnline(state) {
+		//TODO: analyze if we need to discover and connect to peers for relay.
+		w.discoverAndConnectPeers()
+	}
 	isOnline := !state.Offline
 	if w.cfg.LightClient {
 		//TODO: Update this as per  https://github.com/waku-org/go-waku/issues/1114
@@ -1716,10 +1724,7 @@ func (w *Waku) ConnectionChanged(state connection.State) {
 		w.handleNetworkChangeFromApp(state)
 	} else {
 		// for lightClient state update and onlineChange is handled in filterManager.
-		// going online
-		if isOnline && !w.onlineChecker.IsOnline() {
-			//TODO: analyze if we need to discover and connect to peers for relay.
-			w.discoverAndConnectPeers()
+		if w.isGoingOnline(state) {
 			select {
 			case w.goingOnline <- struct{}{}:
 			default:
