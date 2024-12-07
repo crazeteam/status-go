@@ -14,6 +14,8 @@ import (
 	"github.com/status-im/status-go/internal/sentry"
 )
 
+const redactionPlaceholder = "***"
+
 var sensitiveKeys = []string{
 	"password",
 	"newPassword",
@@ -32,6 +34,7 @@ var sensitiveKeys = []string{
 	"alchemyOptimismSepoliaToken",
 	"verifyENSURL",
 	"verifyTransactionURL",
+	"gifs/api-key",
 }
 
 var sensitiveRegexString = fmt.Sprintf(`(?i)(".*?(%s).*?")\s*:\s*("[^"]*")`, strings.Join(sensitiveKeys, "|"))
@@ -88,7 +91,7 @@ func Call(logger, requestLogger *zap.Logger, fn any, params ...any) any {
 
 	if requestLogger != nil {
 		methodName := getShortFunctionName(fn)
-		Log(requestLogger, methodName, params, resp, startTime)
+		LogCall(requestLogger, methodName, params, resp, startTime)
 	}
 
 	return resp
@@ -106,7 +109,7 @@ func removeSensitiveInfo(jsonStr string) string {
 	// see related test for the usage of this function
 	return sensitiveRegex.ReplaceAllStringFunc(jsonStr, func(match string) string {
 		parts := sensitiveRegex.FindStringSubmatch(match)
-		return fmt.Sprintf(`%s:"***"`, parts[1])
+		return fmt.Sprintf(`%s:"%s"`, parts[1], redactionPlaceholder)
 	})
 }
 
@@ -132,7 +135,7 @@ func Recover(logger *zap.Logger) {
 	panic(err)
 }
 
-func Log(logger *zap.Logger, method string, params any, resp any, startTime time.Time) {
+func LogCall(logger *zap.Logger, method string, params any, resp any, startTime time.Time) {
 	if logger == nil {
 		return
 	}
@@ -145,11 +148,34 @@ func Log(logger *zap.Logger, method string, params any, resp any, startTime time
 	)
 }
 
+func LogSignal(logger *zap.Logger, eventType string, event interface{}) {
+	if logger == nil {
+		return
+	}
+	logger.Debug("signal",
+		zap.String("type", eventType),
+		dataField("event", event),
+	)
+}
+
 func dataField(name string, data any) zap.Field {
-	dataString := removeSensitiveInfo(fmt.Sprintf("%+v", data))
+	dataString := removeSensitiveInfo(marshalData(data))
 	var paramsParsed any
 	if json.Unmarshal([]byte(dataString), &paramsParsed) == nil {
 		return zap.Any(name, paramsParsed)
 	}
 	return zap.String(name, dataString)
+}
+
+func marshalData(data any) string {
+	switch d := data.(type) {
+	case string:
+		return d
+	default:
+		bytes, err := json.Marshal(d)
+		if err != nil {
+			return "<failed to marshal value>"
+		}
+		return string(bytes)
+	}
 }
