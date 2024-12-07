@@ -2,12 +2,13 @@ package balancefetcher
 
 import (
 	"context"
-	"errors"
 	"math/big"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/pkg/errors"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -22,6 +23,10 @@ import (
 
 var NativeChainAddress = common.HexToAddress("0x")
 var requestTimeout = 20 * time.Second
+
+var (
+	errScanningContract = errors.New("error scanning contract")
+)
 
 const (
 	tokenChunkSize = 500
@@ -69,8 +74,7 @@ func (bf *DefaultBalanceFetcher) fetchBalancesForChain(parent context.Context, c
 
 	ethScanContract, availableAtBlock, err := bf.contractMaker.NewEthScan(client.NetworkID())
 	if err != nil {
-		logutils.ZapLogger().Error("error scanning contract", zap.Error(err))
-		return nil, err
+		return nil, errors.Wrap(err, errScanningContract.Error())
 	}
 
 	fetchChainBalance := false
@@ -319,6 +323,10 @@ func (bf *DefaultBalanceFetcher) GetBalancesAtByChain(parent context.Context, cl
 	case <-group.WaitAsync():
 	case <-parent.Done():
 		return nil, parent.Err()
+	}
+	if group.Error() != nil {
+		logutils.ZapLogger().Error("failed to get balances by chain", zap.Error(group.Error()))
+		return nil, group.Error()
 	}
 	return response, nil
 }
