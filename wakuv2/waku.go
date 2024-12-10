@@ -1589,7 +1589,7 @@ func (w *Waku) GetEnvelope(hash gethcommon.Hash) *common.ReceivedMessage {
 	return envelope.Value()
 }
 
-// isEnvelopeCached checks if envelope with specific hash has already been received and cached.
+// IsEnvelopeCached checks if envelope with specific hash has already been received and cached.
 func (w *Waku) IsEnvelopeCached(hash gethcommon.Hash) bool {
 	w.poolMu.Lock()
 	defer w.poolMu.Unlock()

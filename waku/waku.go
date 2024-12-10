@@ -653,7 +653,7 @@ func (w *Waku) SendHistoricMessageResponse(peerID []byte, payload []byte) error 
 	return peer.SendHistoricMessageResponse(payload)
 }
 
-// SendP2PMessage sends a peer-to-peer message to a specific peer.
+// SendP2PMessages sends a peer-to-peer message to a specific peer.
 // It sends one or more envelopes in a single batch.
 func (w *Waku) SendP2PMessages(peerID []byte, envelopes ...*common.Envelope) error {
 	p, err := w.getPeer(peerID)
@@ -1501,7 +1501,7 @@ func (w *Waku) Version() uint {
 	return 1
 }
 
-// isEnvelopeCached checks if envelope with specific hash has already been received and cached.
+// IsEnvelopeCached checks if envelope with specific hash has already been received and cached.
 func (w *Waku) IsEnvelopeCached(hash gethcommon.Hash) bool {
 	w.poolMu.Lock()
 	defer w.poolMu.Unlock()
